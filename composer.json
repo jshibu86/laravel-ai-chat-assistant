@@ -1,0 +1,45 @@
+{
+  "name": "shibuj/laravel-ai-chat-assistant",
+  "description": "A BotMan-powered, tool-calling AI chat widget for Laravel with a swappable AI driver (Gemini by default).",
+  "license": "MIT",
+  "keywords": [
+    "laravel",
+    "botman",
+    "gemini",
+    "ai",
+    "chatbot",
+    "assistant"
+  ],
+  "authors": [
+    {
+      "name": "Shibu J",
+      "email": "your-real-email@example.com"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/http": "^10.0|^11.0|^12.0",
+    "botman/botman": "^2.8",
+    "botman/driver-web": "^1.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "ShibuJ\\AiChatAssistant\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "ShibuJ\\AiChatAssistant\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "ShibuJ\\AiChatAssistant\\AiAssistantServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

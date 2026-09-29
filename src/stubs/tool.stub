@@ -1,0 +1,36 @@
+<?php
+
+namespace {{ namespace }};
+
+use ShibuJ\AiChatAssistant\Contracts\Tool;
+
+class {{ class }} implements Tool
+{
+    public function name(): string
+    {
+        return 'change_me';
+    }
+
+    public function description(): string
+    {
+        return 'Describe what this tool does and when the model should call it.';
+    }
+
+    public function inputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'query' => ['type' => 'string'],
+            ],
+            // 'required' => ['query'],
+        ];
+    }
+
+    public function handle(array $args): array
+    {
+        return [
+            // Return only what the model needs — never secrets or credentials.
+        ];
+    }
+}
