@@ -1,0 +1,372 @@
+/*
+ * Assistant widget styling.
+ * Uses CSS variables with fallbacks so it works standalone, but will pick up
+ * a host app's own --bs-primary/--bs-info/--bg/--surface/etc. tokens if present.
+ */
+.asst {
+  --asst-primary: var(--bs-primary, #0b4650);
+  --asst-primary-ink: #ffffff;
+  --asst-accent: var(--bs-info, #a6e115);
+  --asst-accent-ink: var(--asst-primary);
+  --asst-accent-dark: color-mix(in srgb, var(--asst-accent) 80%, black);
+
+  --asst-bg: var(--bg, #ffffff);
+  --asst-surface: var(--surface, #f8fafc);
+  --asst-surface-alt: var(--surface2, #eef1f5);
+  --asst-line: var(--border2, #e2e8f0);
+  --asst-text: var(--txt-hi, #0f172a);
+  --asst-muted: var(--txt-mid, #64748b);
+
+  --asst-danger: var(--danger, #dc2626);
+  --asst-online: var(--success, #22c55e);
+
+  --asst-radius: var(--r, 10px);
+  --asst-radius-lg: var(--r-lg, 16px);
+  --asst-glow: var(--primary-glow, rgba(11, 70, 80, 0.35));
+  --asst-shadow: var(--shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.18));
+  --asst-t: var(--t, 0.18s ease);
+
+  font-family: var(--font-body, inherit);
+  font-size: 14px;
+  color: var(--asst-text);
+}
+.asst *,
+.asst *::before,
+.asst *::after {
+  box-sizing: border-box;
+}
+.asst button,
+.asst input {
+  font: inherit;
+}
+
+/* ── Launcher ───────────────────────────────────────────────── */
+.asst-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1050;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--asst-primary);
+  color: var(--asst-primary-ink);
+  font-size: 22px;
+  box-shadow: 0 6px 18px var(--asst-glow);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.asst-launcher.is-dragging {
+  cursor: grabbing;
+}
+.asst-launcher:focus-visible,
+.asst-icon-btn:focus-visible,
+.asst-chip:focus-visible,
+.asst-send:focus-visible {
+  outline: 2px solid var(--asst-accent);
+  outline-offset: 2px;
+}
+.asst-launcher:hover {
+  transform: scale(1.08);
+  transition: transform var(--asst-t);
+}
+.asst-launcher::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--asst-online);
+  border: 2px solid var(--asst-surface);
+}
+.asst-launcher[aria-expanded="true"]::after {
+  display: none;
+}
+
+/* ── Panel ──────────────────────────────────────────────────── */
+.asst-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  z-index: 1051;
+  width: 380px;
+  height: min(600px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--asst-bg);
+  border: 1px solid var(--asst-line);
+  border-radius: var(--asst-radius-lg);
+  box-shadow: var(--asst-shadow);
+}
+.asst-panel[hidden] {
+  display: none;
+}
+
+.asst-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--asst-primary);
+  color: var(--asst-primary-ink);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+.asst-head-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.asst-head-text strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.asst-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--asst-radius);
+  cursor: pointer;
+  background: transparent;
+  color: var(--asst-primary-ink);
+  opacity: 0.8;
+  transition:
+    opacity var(--asst-t),
+    background var(--asst-t);
+}
+.asst-icon-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* ── Conversation ───────────────────────────────────────────── */
+.asst-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.asst-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.asst-welcome-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.asst-welcome-sub {
+  margin: 0 0 6px;
+  color: var(--asst-muted);
+}
+.asst-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--asst-text);
+  background: var(--asst-surface);
+  border: 1px solid var(--asst-line);
+  border-radius: var(--asst-radius);
+  transition: border-color var(--asst-t);
+}
+.asst-chip i {
+  width: 18px;
+  text-align: center;
+  color: var(--asst-primary);
+}
+.asst-chip:hover {
+  border-color: var(--asst-primary);
+}
+
+.asst-row {
+  display: flex;
+  flex-direction: column;
+  max-width: 88%;
+}
+.asst-row--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.asst-row--bot,
+.asst-row--error {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.asst-msg {
+  padding: 9px 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--asst-radius-lg);
+  background: var(--asst-surface);
+  border: 1px solid var(--asst-line);
+}
+.asst-row--bot .asst-msg {
+  border-top-left-radius: 4px;
+}
+.asst-row--user .asst-msg {
+  background: var(--asst-primary);
+  color: var(--asst-primary-ink);
+  border-color: var(--asst-primary);
+  border-top-right-radius: 4px;
+}
+.asst-row--error .asst-msg {
+  border-left: 3px solid var(--asst-danger);
+}
+.asst-msg code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--asst-surface-alt);
+  font-size: 12.5px;
+}
+.asst-time {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--asst-muted);
+}
+
+.asst-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.asst-action {
+  padding: 8px 14px;
+  cursor: pointer;
+  color: var(--asst-text);
+  background: var(--asst-surface);
+  border: 1px solid var(--asst-line);
+  border-radius: var(--asst-radius);
+}
+.asst-action--primary {
+  font-weight: 600;
+  background: var(--asst-accent);
+  border-color: var(--asst-accent);
+  color: var(--asst-accent-ink);
+}
+.asst-action--primary:hover:not(:disabled) {
+  background: var(--asst-accent-dark);
+  border-color: var(--asst-accent-dark);
+}
+.asst-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.asst-typing {
+  display: inline-flex;
+  gap: 4px;
+  padding: 12px 14px;
+}
+.asst-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--asst-muted);
+  animation: asst-blink 1.1s infinite;
+}
+.asst-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.asst-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes asst-blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+/* ── Composer ───────────────────────────────────────────────── */
+.asst-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--asst-surface);
+  border-top: 1px solid var(--asst-line);
+}
+.asst-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  color: var(--asst-text);
+  background: var(--asst-surface);
+  border: 1px solid var(--asst-line);
+  border-radius: var(--asst-radius);
+}
+.asst-form input::placeholder {
+  color: var(--asst-muted);
+}
+.asst-form input:focus-visible {
+  outline: 2px solid var(--asst-primary);
+  outline-offset: 1px;
+}
+.asst-send {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--asst-radius);
+  cursor: pointer;
+  background: var(--asst-accent);
+  color: var(--asst-accent-ink);
+  transition: background var(--asst-t);
+}
+.asst-send:hover:not(:disabled) {
+  background: var(--asst-accent-dark);
+}
+.asst-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.asst-foot {
+  margin: 0;
+  padding: 0 12px 10px;
+  background: var(--asst-surface);
+  font-size: 11.5px;
+  color: var(--asst-muted);
+  text-align: center;
+}
+
+/* ── Small screens: full-screen panel ───────────────────────── */
+@media (max-width: 575.98px) {
+  .asst-panel {
+    inset: 0;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    border: 0;
+  }
+  .asst-head {
+    cursor: default;
+    touch-action: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asst-launcher {
+    animation: none;
+  }
+  .asst-typing i {
+    animation: none;
+    opacity: 0.6;
+  }
+}
