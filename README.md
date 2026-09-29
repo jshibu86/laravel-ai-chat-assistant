@@ -15,6 +15,7 @@ A **BotMan-powered, tool-calling AI chat widget** for Laravel. Drop in a floatin
 - PHP 8.1+
 - Laravel 10, 11, or 12
 - A Gemini API key (or credentials for whichever driver you use)
+- A CSRF meta tag and Font Awesome loaded on any page using the widget — see the two notes in [Installation](#installation) below
 
 ---
 
@@ -49,6 +50,18 @@ AI_ASSISTANT_DRIVER=gemini
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-flash-latest
 ```
+
+### Two things the widget expects from your layout
+
+The widget's JS posts to the chat endpoint with `fetch()`, and its icons use Font Awesome — neither is bundled by the package, since both are things a Laravel app almost always already has. Add both to the `<head>` of any layout that includes the widget:
+
+```blade
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+```
+
+- **CSRF meta tag** — the chat route runs behind Laravel's `web` middleware group (CSRF protection included, by design — see [Security](#security)). The widget's JS reads `<meta name="csrf-token">` and sends it as `X-CSRF-TOKEN` on every request. Without this tag present, every message fails with **"CSRF token mismatch"** and the widget shows _"The assistant could not answer. Check your connection and try again."_ Most full app layouts already include this tag (Laravel's default `resources/views/layouts/app.blade.php` does) — a bare `welcome.blade.php` or a minimal test page usually doesn't, so add it explicitly if you're testing on one.
+- **Font Awesome** — the launcher and chat icons (`fas fa-comments`, `fas fa-times`, quick-action chip icons, etc.) use Font Awesome classes. If your app doesn't already load Font Awesome (via CDN or npm), the icons will render as empty boxes or nothing at all — the widget still works, it just looks broken. The CDN link above is the fastest fix; swap in your own npm-bundled version if you prefer not to depend on a CDN.
 
 That's it — the package auto-registers its service provider and a chat route.
 
@@ -173,7 +186,7 @@ With only one assistant registered, you don't need a resolver — it's used auto
 
 ### 4. Add the widget to your layout
 
-In your main Blade layout, just before `</body>`:
+In your main Blade layout — make sure the `<meta name="csrf-token">` tag and Font Awesome link from [Installation](#installation) are in the `<head>` first — then just before `</body>`:
 
 ```blade
 @auth
@@ -205,7 +218,7 @@ Done. Visit any page with that layout and you'll see the chat launcher.
 | `scope`       | **Required to keep conversations separate per user/role.** Any unique string — e.g. `'user-' . auth()->id()`. Two different scopes never see each other's chat history.                                                           |
 | `quick`       | Array of quick-action chips. Each is either `['icon' => ..., 'label' => ..., 'send' => '...']` (sends a message immediately) or `['icon' => ..., 'label' => ..., 'prefill' => '...']` (fills the input for the user to complete). |
 
-Icons use Font Awesome classes (`fa-search`, `fa-history`, etc.) — make sure Font Awesome is loaded on the page, or swap the markup in the published view.
+Icons use Font Awesome classes (`fa-search`, `fa-history`, etc.) — make sure Font Awesome is loaded on the page (see [Installation](#installation)), or swap the markup in the published view for your own icon set.
 
 ---
 
@@ -363,6 +376,7 @@ The package deliberately keeps identity **out of tool arguments**. A few rules w
 - **Never return credentials, secrets, or payment details** from a tool, even if your app has them available. If a tool wraps sensitive configuration, build an explicit allowlist rather than passing a raw config object through.
 - **Keep the assistant read-only unless you explicitly design a write action.** Any tool that changes data should be a deliberate, narrow exception — the shipped example tool and stub are both read-only by design.
 - **End every system prompt with an instruction to ignore embedded instructions** — the stub does this for you; keep that line when you customize the prompt.
+- **CSRF protection stays on.** The chat route runs through Laravel's `web` middleware group intentionally, so cross-site requests can't hit your assistant's tools. Add the CSRF meta tag (see [Installation](#installation)) rather than removing the route from CSRF protection.
 
 ---
 
@@ -504,12 +518,49 @@ return [
 
 ---
 
+## Troubleshooting
+
+### "CSRF token mismatch" / widget always shows "The assistant could not answer"
+
+The page including the widget is missing the CSRF meta tag. Add this to the `<head>`:
+
+```blade
+<meta name="csrf-token" content="{{ csrf_token() }}">
+```
+
+The widget's JS reads this tag and sends it as the `X-CSRF-TOKEN` header on every request; without it, Laravel's `VerifyCsrfToken` middleware rejects every message with a 419 response, which the widget surfaces as a generic connection error. This is easy to miss on a bare test page (e.g. the default `welcome.blade.php`) since a full app layout usually already has this tag from Laravel's default scaffolding.
+
+### Chat icons show as empty boxes or don't appear at all
+
+Font Awesome isn't loaded on the page. Add a CDN link (or your own npm-bundled copy) to the `<head>`:
+
+```blade
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+```
+
+The widget's launcher, close/new-chat buttons, and quick-action chips all use `fas fa-*` classes. The widget still functions correctly without Font Awesome present — only the icons are affected.
+
+### `vendor:publish --tag=ai-assistant-assets` fails with "Can't locate path"
+
+This means the installed package version is missing its `resources/assets/` files (a packaging bug in early `0.1.x` releases, fixed in `v0.1.4+`). Update to the latest version and republish:
+
+```bash
+composer update shibuj/laravel-ai-chat-assistant
+php artisan vendor:publish --tag=ai-assistant-assets --force
+```
+
+### Composer can't find the package / version conflict on install
+
+Double check you're requiring the exact published name — `composer require shibuj/laravel-ai-chat-assistant` — and that your Laravel/PHP version falls within the package's declared `require` range in its own `composer.json`. Run with `-vvv` for the exact conflicting constraint if it still fails:
+
+```bash
+composer require shibuj/laravel-ai-chat-assistant -vvv
+```
+
+---
+
 ## Upgrading
 
 Check `CHANGELOG.md` before upgrading a major version — the `Assistant` and `Tool` contracts are considered the stable public API; changes to them will always be a major-version bump.
 
 ---
-
-## License
-
-MIT
