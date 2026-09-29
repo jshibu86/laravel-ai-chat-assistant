@@ -1,15 +1,22 @@
 /*
  * Assistant widget styling.
- * Uses CSS variables with fallbacks so it works standalone, but will pick up
- * a host app's own --bs-primary/--bs-info/--bg/--surface/etc. tokens if present.
+ * Every color/radius/shadow/font/transition reads from CSS variables so it can
+ * pick up a host app's own design tokens (e.g. Bootstrap's --bs-primary,
+ * --bs-info) automatically. Each variable has a fallback, so the widget still
+ * looks complete in an app with no matching tokens defined.
  */
 .asst {
+  /* Brand */
   --asst-primary: var(--bs-primary, #0b4650);
   --asst-primary-ink: #ffffff;
   --asst-accent: var(--bs-info, #a6e115);
   --asst-accent-ink: var(--asst-primary);
-  --asst-accent-dark: color-mix(in srgb, var(--asst-accent) 80%, black);
+  --asst-accent-dark: var(
+    --info-dark,
+    color-mix(in srgb, var(--asst-accent) 80%, black)
+  );
 
+  /* Surfaces and text: switch automatically if the host sets data-theme="dark" */
   --asst-bg: var(--bg, #ffffff);
   --asst-surface: var(--surface, #f8fafc);
   --asst-surface-alt: var(--surface2, #eef1f5);
@@ -17,12 +24,15 @@
   --asst-text: var(--txt-hi, #0f172a);
   --asst-muted: var(--txt-mid, #64748b);
 
+  /* States */
   --asst-danger: var(--danger, #dc2626);
   --asst-online: var(--success, #22c55e);
 
+  /* Shape, depth, motion */
   --asst-radius: var(--r, 10px);
   --asst-radius-lg: var(--r-lg, 16px);
   --asst-glow: var(--primary-glow, rgba(11, 70, 80, 0.35));
+  --asst-ring: var(--lime-glow, rgba(166, 225, 21, 0.35));
   --asst-shadow: var(--shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.18));
   --asst-t: var(--t, 0.18s ease);
 
@@ -57,6 +67,10 @@
   cursor: grab;
   touch-action: none;
   user-select: none;
+  /* gentle float + soft pulse ring in the accent colour */
+  animation:
+    asst-float 3.4s ease-in-out infinite,
+    asst-pulse 2.6s ease-out infinite;
 }
 .asst-launcher.is-dragging {
   cursor: grabbing;
@@ -68,10 +82,58 @@
   outline: 2px solid var(--asst-accent);
   outline-offset: 2px;
 }
-.asst-launcher:hover {
-  transform: scale(1.08);
-  transition: transform var(--asst-t);
+
+@keyframes asst-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
+@keyframes asst-pulse {
+  0% {
+    box-shadow:
+      0 6px 18px var(--asst-glow),
+      0 0 0 0 var(--asst-ring);
+  }
+  70% {
+    box-shadow:
+      0 6px 18px var(--asst-glow),
+      0 0 0 16px transparent;
+  }
+  100% {
+    box-shadow:
+      0 6px 18px var(--asst-glow),
+      0 0 0 0 transparent;
+  }
+}
+
+/* The chat icon does a small "hello" wiggle every few seconds */
+.asst-launcher i {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: asst-wiggle 6s ease-in-out infinite;
+}
+@keyframes asst-wiggle {
+  0%,
+  84%,
+  100% {
+    transform: rotate(0) scale(1);
+  }
+  88% {
+    transform: rotate(-16deg) scale(1.12);
+  }
+  92% {
+    transform: rotate(14deg) scale(1.12);
+  }
+  96% {
+    transform: rotate(-7deg) scale(1.05);
+  }
+}
+
+/* Small "online" dot */
 .asst-launcher::after {
   content: "";
   position: absolute;
@@ -82,6 +144,21 @@
   border-radius: 50%;
   background: var(--asst-online);
   border: 2px solid var(--asst-surface);
+}
+
+/* Hover: stop floating, grow slightly */
+.asst-launcher:hover {
+  animation: asst-pulse 2.6s ease-out infinite;
+  transform: scale(1.08);
+  transition: transform var(--asst-t);
+}
+
+/* Quiet while the chat is open or the launcher is being dragged */
+.asst-launcher[aria-expanded="true"],
+.asst-launcher.is-dragging,
+.asst-launcher[aria-expanded="true"] i,
+.asst-launcher.is-dragging i {
+  animation: none;
 }
 .asst-launcher[aria-expanded="true"]::after {
   display: none;
@@ -128,6 +205,10 @@
   font-size: 15px;
   font-weight: 600;
 }
+.asst-head-text span {
+  font-size: 12px;
+  opacity: 0.75;
+}
 .asst-icon-btn {
   width: 32px;
   height: 32px;
@@ -143,7 +224,7 @@
 }
 .asst-icon-btn:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--asst-primary-ink) 14%, transparent);
 }
 
 /* ── Conversation ───────────────────────────────────────────── */
@@ -155,6 +236,7 @@
   flex-direction: column;
   gap: 10px;
 }
+
 .asst-welcome {
   display: flex;
   flex-direction: column;
@@ -239,6 +321,7 @@
   color: var(--asst-muted);
 }
 
+/* Interactive action buttons (e.g. confirm / cancel) */
 .asst-actions {
   display: flex;
   gap: 8px;
@@ -266,7 +349,12 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.asst-action:focus-visible {
+  outline: 2px solid var(--asst-primary);
+  outline-offset: 2px;
+}
 
+/* Typing indicator */
 .asst-typing {
   display: inline-flex;
   gap: 4px;
@@ -361,8 +449,10 @@
   }
 }
 
+/* ── Respect the OS "reduce motion" setting ─────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .asst-launcher {
+  .asst-launcher,
+  .asst-launcher i {
     animation: none;
   }
   .asst-typing i {

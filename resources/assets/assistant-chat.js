@@ -1,7 +1,9 @@
-const asstState = {
+const state = {
   busy: false,
   userId: null,
   storeKey: "assistantChat:v1",
+  posKey: "assistantChat:pos",
+  pos: null,
   suppressClick: false,
   name: "assistant",
   welcome: "How can I help?",
@@ -14,16 +16,17 @@ class AssistantChatConfig {
     const root = document.getElementById("assistantChat");
     if (!root) return;
 
-    asstState.endpoint = root.dataset.endpoint;
-    asstState.name = root.dataset.name || "assistant";
-    asstState.welcome = root.dataset.welcome || "";
-    asstState.storeKey = `assistantChat:v1:${root.dataset.scope || "guest"}`;
+    state.endpoint = root.dataset.endpoint;
+    state.name = root.dataset.name || "assistant";
+    state.welcome = root.dataset.welcome || "";
+    // One saved chat per scope, so a different user/role never sees the previous chat
+    state.storeKey = `assistantChat:v1:${root.dataset.scope || "guest"}`;
     try {
-      asstState.quick = JSON.parse(root.dataset.quick || "[]");
+      state.quick = JSON.parse(root.dataset.quick || "[]");
     } catch (e) {
-      asstState.quick = [];
+      state.quick = [];
     }
-    asstState.el = {
+    state.el = {
       toggle: document.getElementById("assistantChatToggle"),
       panel: document.getElementById("assistantChatPanel"),
       close: document.getElementById("assistantChatClose"),
@@ -33,15 +36,23 @@ class AssistantChatConfig {
       input: document.getElementById("assistantChatInput"),
       send: document.getElementById("assistantChatSend"),
     };
-    asstState.userId = AssistantChatConfig.AssistantChatConfigUserId();
+    state.userId = AssistantChatConfig.AssistantChatConfigUserId();
+    state.el.toggle.title =
+      state.name.charAt(0).toUpperCase() +
+      state.name.slice(1) +
+      ". Drag to move.";
 
     AssistantChatConfig.AssistantChatConfigBind();
+    AssistantChatConfig.AssistantChatConfigRestorePosition();
 
+    // A browser refresh starts a new conversation; moving between pages keeps it.
     const nav = performance.getEntriesByType("navigation")[0];
     if (nav && nav.type === "reload") {
       try {
-        sessionStorage.removeItem(asstState.storeKey);
-      } catch (e) {}
+        sessionStorage.removeItem(state.storeKey);
+      } catch (e) {
+        /* ignore */
+      }
       AssistantChatConfig.AssistantChatConfigPost("__reset__").catch(() => {});
     }
     AssistantChatConfig.AssistantChatConfigRestore();
@@ -63,21 +74,33 @@ class AssistantChatConfig {
   }
 
   static AssistantChatConfigBind() {
-    const { toggle, close, form, input } = asstState.el;
+    const { toggle, close, form, input } = state.el;
     toggle.addEventListener("click", () => {
-      if (asstState.suppressClick) return;
-      AssistantChatConfig.AssistantChatConfigToggle(asstState.el.panel.hidden);
+      if (state.suppressClick) return;
+      AssistantChatConfig.AssistantChatConfigToggle(state.el.panel.hidden);
+    });
+    AssistantChatConfig.AssistantChatConfigDraggable(toggle);
+    AssistantChatConfig.AssistantChatConfigDraggable(
+      state.el.panel.querySelector(".asst-head"),
+    );
+    window.addEventListener("resize", () => {
+      if (state.pos)
+        AssistantChatConfig.AssistantChatConfigMoveTo(
+          state.pos.left,
+          state.pos.top,
+        );
+      else if (!state.el.panel.hidden)
+        AssistantChatConfig.AssistantChatConfigPlace();
     });
     close.addEventListener("click", () =>
       AssistantChatConfig.AssistantChatConfigToggle(false),
     );
-    asstState.el.newChat.addEventListener("click", () =>
+    state.el.newChat.addEventListener("click", () =>
       AssistantChatConfig.AssistantChatConfigReset(),
     );
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !asstState.el.panel.hidden) {
+      if (e.key === "Escape" && !state.el.panel.hidden)
         AssistantChatConfig.AssistantChatConfigToggle(false);
-      }
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -86,9 +109,14 @@ class AssistantChatConfig {
   }
 
   static AssistantChatConfigToggle(open) {
-    const { toggle, panel, input } = asstState.el;
+    const { toggle, panel, input } = state.el;
     toggle.setAttribute("aria-expanded", String(open));
     panel.hidden = !open;
+    if (open) AssistantChatConfig.AssistantChatConfigPlace();
+    toggle.setAttribute(
+      "aria-label",
+      open ? `Close ${state.name}` : `Open ${state.name}`,
+    );
     toggle.querySelector("i").className = open
       ? "fas fa-times"
       : "fas fa-comments";
@@ -100,10 +128,121 @@ class AssistantChatConfig {
     }
   }
 
+  static AssistantChatConfigIsMobile() {
+    return window.matchMedia("(max-width: 575.98px)").matches;
+  }
+
+  // Drag either handle (launcher or panel header); both move the launcher and the panel follows it.
+  static AssistantChatConfigDraggable(handle) {
+    let drag = null;
+
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest(".asst-icon-btn")) return;
+      if (
+        handle !== state.el.toggle &&
+        AssistantChatConfig.AssistantChatConfigIsMobile()
+      )
+        return;
+      const r = state.el.toggle.getBoundingClientRect();
+      drag = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        left: r.left,
+        top: r.top,
+        moved: false,
+      };
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 5) return; // a tiny movement is still a tap
+      drag.moved = true;
+      handle.classList.add("is-dragging");
+      AssistantChatConfig.AssistantChatConfigMoveTo(
+        drag.left + dx,
+        drag.top + dy,
+      );
+    });
+
+    const finish = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      handle.classList.remove("is-dragging");
+      if (drag.moved) {
+        state.suppressClick = true; // the drop must not count as a click on the launcher
+        setTimeout(() => {
+          state.suppressClick = false;
+        }, 0);
+        try {
+          localStorage.setItem(state.posKey, JSON.stringify(state.pos));
+        } catch (err) {
+          /* storage unavailable */
+        }
+      }
+      drag = null;
+    };
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+  }
+
+  static AssistantChatConfigMoveTo(left, top) {
+    const t = state.el.toggle;
+    const maxLeft = Math.max(8, window.innerWidth - t.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - t.offsetHeight - 8);
+    left = Math.min(Math.max(8, left), maxLeft);
+    top = Math.min(Math.max(8, top), maxTop);
+    Object.assign(t.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      right: "auto",
+      bottom: "auto",
+    });
+    state.pos = { left, top };
+    if (!state.el.panel.hidden) AssistantChatConfig.AssistantChatConfigPlace();
+  }
+
+  static AssistantChatConfigPlace() {
+    const panel = state.el.panel;
+    if (AssistantChatConfig.AssistantChatConfigIsMobile()) {
+      ["left", "top", "right", "bottom"].forEach((k) => {
+        panel.style[k] = "";
+      });
+      return;
+    }
+    const r = state.el.toggle.getBoundingClientRect();
+    const w = panel.offsetWidth;
+    const h = panel.offsetHeight;
+    const gap = 12;
+    const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+    let top = r.top - h - gap; // prefer above the launcher
+    if (top < 8) top = r.bottom + gap; // otherwise below it
+    top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
+    Object.assign(panel.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      right: "auto",
+      bottom: "auto",
+    });
+  }
+
+  static AssistantChatConfigRestorePosition() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(state.posKey) || "null");
+      if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+        AssistantChatConfig.AssistantChatConfigMoveTo(saved.left, saved.top);
+      }
+    } catch (e) {
+      /* no saved position */
+    }
+  }
+
   static AssistantChatConfigRestore() {
     let saved = [];
     try {
-      saved = JSON.parse(sessionStorage.getItem(asstState.storeKey) || "[]");
+      saved = JSON.parse(sessionStorage.getItem(state.storeKey) || "[]");
     } catch (e) {
       saved = [];
     }
@@ -126,10 +265,10 @@ class AssistantChatConfig {
     title.textContent = "How can I help?";
     const sub = document.createElement("p");
     sub.className = "asst-welcome-sub";
-    sub.textContent = asstState.welcome;
+    sub.textContent = state.welcome;
     box.append(title, sub);
 
-    asstState.quick.forEach((a) => {
+    state.quick.forEach((a) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "asst-chip";
@@ -145,13 +284,13 @@ class AssistantChatConfig {
         if (a.send) {
           AssistantChatConfig.AssistantChatConfigSend(a.send);
         } else {
-          asstState.el.input.value = a.prefill || "";
-          asstState.el.input.focus();
+          state.el.input.value = a.prefill || "";
+          state.el.input.focus();
         }
       });
       box.appendChild(btn);
     });
-    asstState.el.log.appendChild(box);
+    state.el.log.appendChild(box);
   }
 
   static AssistantChatConfigFormat(text) {
@@ -167,7 +306,10 @@ class AssistantChatConfig {
   static AssistantChatConfigAdd(role, text, time, persist = true) {
     const stamp =
       time ||
-      new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      new Date().toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
     const row = document.createElement("div");
     row.className = `asst-row asst-row--${role}`;
 
@@ -181,23 +323,26 @@ class AssistantChatConfig {
     meta.textContent = stamp;
 
     row.append(bubble, meta);
-    asstState.el.log.appendChild(row);
+    state.el.log.appendChild(row);
     AssistantChatConfig.AssistantChatConfigScroll();
 
     if (persist && role !== "error") {
       try {
         const saved = JSON.parse(
-          sessionStorage.getItem(asstState.storeKey) || "[]",
+          sessionStorage.getItem(state.storeKey) || "[]",
         );
         saved.push({ role, text, time: stamp });
         sessionStorage.setItem(
-          asstState.storeKey,
+          state.storeKey,
           JSON.stringify(saved.slice(-30)),
         );
-      } catch (e) {}
+      } catch (e) {
+        /* storage unavailable: chat still works */
+      }
     }
   }
 
+  // A bot message with buttons (e.g. Confirm / Cancel). Buttons are single use.
   static AssistantChatConfigAddActions(text, actions) {
     const row = document.createElement("div");
     row.className = "asst-row asst-row--bot";
@@ -215,14 +360,16 @@ class AssistantChatConfig {
         index === 0 ? "asst-action asst-action--primary" : "asst-action";
       btn.textContent = a.text;
       btn.addEventListener("click", () => {
-        bar.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        bar.querySelectorAll("button").forEach((b) => {
+          b.disabled = true;
+        });
         AssistantChatConfig.AssistantChatConfigSend(a.value, a.text);
       });
       bar.appendChild(btn);
     });
 
     row.append(bubble, bar);
-    asstState.el.log.appendChild(row);
+    state.el.log.appendChild(row);
     AssistantChatConfig.AssistantChatConfigScroll();
   }
 
@@ -231,7 +378,7 @@ class AssistantChatConfig {
     row.className = "asst-row asst-row--bot";
     row.innerHTML =
       '<div class="asst-msg asst-typing" aria-label="Assistant is typing"><i></i><i></i><i></i></div>';
-    asstState.el.log.appendChild(row);
+    state.el.log.appendChild(row);
     AssistantChatConfig.AssistantChatConfigScroll();
     return row;
   }
@@ -244,42 +391,46 @@ class AssistantChatConfig {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     if (csrf) headers["X-CSRF-TOKEN"] = csrf;
 
-    return fetch(asstState.endpoint, {
+    return fetch(state.endpoint, {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: new URLSearchParams({
         driver: "web",
-        userId: asstState.userId,
+        userId: state.userId,
         message,
       }),
     });
   }
 
   static AssistantChatConfigReset() {
-    if (asstState.busy) return;
+    if (state.busy) return;
     try {
-      sessionStorage.removeItem(asstState.storeKey);
-    } catch (e) {}
-    asstState.el.log.innerHTML = "";
+      sessionStorage.removeItem(state.storeKey);
+    } catch (e) {
+      /* ignore */
+    }
+    state.el.log.innerHTML = "";
     AssistantChatConfig.AssistantChatConfigWelcome();
+    // The model's memory of the chat lives on the server, so clear that too.
     AssistantChatConfig.AssistantChatConfigPost("__reset__").catch(() => {});
-    asstState.el.input.focus();
+    state.el.input.focus();
   }
 
   static AssistantChatConfigScroll() {
-    asstState.el.log.scrollTop = asstState.el.log.scrollHeight;
+    state.el.log.scrollTop = state.el.log.scrollHeight;
   }
 
+  // `label` is what the person sees in their bubble when the value sent is a button command.
   static async AssistantChatConfigSend(raw, label) {
     const text = (raw || "").trim();
-    if (!text || asstState.busy) return;
+    if (!text || state.busy) return;
 
-    asstState.busy = true;
-    asstState.el.send.disabled = true;
+    state.busy = true;
+    state.el.send.disabled = true;
     document.getElementById("assistantChatWelcome")?.remove();
     AssistantChatConfig.AssistantChatConfigAdd("user", label || text);
-    asstState.el.input.value = "";
+    state.el.input.value = "";
     const typing = AssistantChatConfig.AssistantChatConfigTyping();
 
     try {
@@ -305,9 +456,9 @@ class AssistantChatConfig {
         "The assistant could not answer. Check your connection and try again.",
       );
     } finally {
-      asstState.busy = false;
-      asstState.el.send.disabled = false;
-      asstState.el.input.focus();
+      state.busy = false;
+      state.el.send.disabled = false;
+      state.el.input.focus();
     }
   }
 }
