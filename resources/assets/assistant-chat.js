@@ -11,6 +11,7 @@ const state = {
 
   // Voice
   voiceLang: "en-US",
+  voiceGender: "female", // change to "male" for a male voice
   listening: false,
   speak: false,
   rec: null,
@@ -645,6 +646,10 @@ class AssistantChatConfig {
       return;
     }
 
+    // Chrome loads voices asynchronously
+    window.speechSynthesis.onvoiceschanged = () =>
+      window.speechSynthesis.getVoices();
+
     try {
       state.speak = localStorage.getItem("assistantChat:speak") === "1";
     } catch (e) {
@@ -681,6 +686,45 @@ class AssistantChatConfig {
       paint();
     });
   }
+  static AssistantChatConfigPickVoice() {
+    if (!("speechSynthesis" in window)) return null;
+
+    const FEMALE = [
+      "female",
+      "zira",
+      "samantha",
+      "karen",
+      "victoria",
+      "susan",
+      "hazel",
+      "aria",
+      "jenny",
+    ];
+    const MALE = [
+      "david",
+      "mark",
+      "daniel",
+      "alex",
+      "james",
+      "guy",
+      "george",
+      "fred",
+    ];
+
+    const lang = (state.voiceLang || "en").split("-")[0].toLowerCase();
+    const voices = window.speechSynthesis
+      .getVoices()
+      .filter((v) => v.lang.toLowerCase().startsWith(lang));
+
+    const has = (v, list) => list.some((h) => v.name.toLowerCase().includes(h));
+    const isFemale = (v) => has(v, FEMALE);
+    const isMale = (v) =>
+      !v.name.toLowerCase().includes("female") && has(v, MALE);
+
+    return (
+      voices.find(state.voiceGender === "female" ? isFemale : isMale) || null
+    );
+  }
   static AssistantChatConfigSpeakText(text) {
     if (!state.speak || !("speechSynthesis" in window)) {
       return;
@@ -696,8 +740,13 @@ class AssistantChatConfig {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(clean);
-
     utterance.lang = state.voiceLang;
+
+    const voice = AssistantChatConfig.AssistantChatConfigPickVoice();
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+    }
 
     window.speechSynthesis.speak(utterance);
   }
