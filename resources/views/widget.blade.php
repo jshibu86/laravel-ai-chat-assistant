@@ -36,13 +36,65 @@
             <div class="asst-head-text">
                 <strong>{{ $name }}</strong>
             </div>
-            <button type="button" class="asst-icon-btn" id="assistantChatNew" title="New chat"><i class="fas fa-plus"></i></button>
-            <button type="button" class="asst-icon-btn" id="assistantChatClose" aria-label="Close"><i class="fas fa-times"></i></button>
+
+            {{-- Read answers aloud --}}
+            <button type="button"
+                    class="asst-icon-btn"
+                    id="assistantChatSpeak"
+                    aria-label="Read answers aloud"
+                    aria-pressed="false"
+                    title="Read answers aloud">
+                <i class="fas fa-volume-mute"></i>
+            </button>
+
+            {{-- New chat --}}
+            <button type="button"
+                    class="asst-icon-btn"
+                    id="assistantChatNew"
+                    aria-label="Start a new chat"
+                    title="New chat">
+                <i class="fas fa-plus"></i>
+            </button>
+
+            {{-- Close --}}
+            <button type="button"
+                    class="asst-icon-btn"
+                    id="assistantChatClose"
+                    aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
         </header>
         <div class="asst-log" id="assistantChatLog" role="log" aria-live="polite"></div>
         <form class="asst-form" id="assistantChatForm" autocomplete="off">
-            <input type="text" id="assistantChatInput" maxlength="500" placeholder="{{ $placeholder }}">
-            <button type="submit" class="asst-send" id="assistantChatSend"><i class="fas fa-paper-plane"></i></button>
+
+            <input type="text"
+                id="assistantChatInput"
+                maxlength="500"
+                placeholder="{{ $placeholder }}"
+                aria-label="Message">
+
+            {{-- Microphone --}}
+            <button type="button"
+                    class="asst-mic"
+                    id="assistantChatMic"
+                    aria-label="Speak your question"
+                    aria-pressed="false"
+                    title="Speak your question">
+
+                <i class="fas fa-microphone" aria-hidden="true"></i>
+
+            </button>
+
+            {{-- Send --}}
+            <button type="submit"
+                    class="asst-send"
+                    id="assistantChatSend"
+                    aria-label="Send message">
+
+                <i class="fas fa-paper-plane" aria-hidden="true"></i>
+
+            </button>
+
         </form>
         <p class="asst-foot">{{ $footer }}</p>
     </section>

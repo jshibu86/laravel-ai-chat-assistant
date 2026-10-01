@@ -5,8 +5,17 @@ const state = {
   posKey: "assistantChat:pos",
   pos: null,
   suppressClick: false,
+
   name: "assistant",
   welcome: "How can I help?",
+
+  // Voice
+  voiceLang: "en-US",
+  listening: false,
+  speak: false,
+  rec: null,
+  voiceCancel: null,
+
   quick: [],
   el: {},
 };
@@ -19,6 +28,7 @@ class AssistantChatConfig {
     state.endpoint = root.dataset.endpoint;
     state.name = root.dataset.name || "assistant";
     state.welcome = root.dataset.welcome || "";
+    state.voiceLang = root.dataset.voiceLang || navigator.language || "en-US";
     // One saved chat per scope, so a different user/role never sees the previous chat
     state.storeKey = `assistantChat:v1:${root.dataset.scope || "guest"}`;
     try {
@@ -35,6 +45,10 @@ class AssistantChatConfig {
       form: document.getElementById("assistantChatForm"),
       input: document.getElementById("assistantChatInput"),
       send: document.getElementById("assistantChatSend"),
+
+      // Voice
+      mic: document.getElementById("assistantChatMic"),
+      speakBtn: document.getElementById("assistantChatSpeak"),
     };
     state.userId = AssistantChatConfig.AssistantChatConfigUserId();
     state.el.toggle.title =
@@ -106,9 +120,14 @@ class AssistantChatConfig {
       e.preventDefault();
       AssistantChatConfig.AssistantChatConfigSend(input.value);
     });
+    AssistantChatConfig.AssistantChatConfigVoice();
+    AssistantChatConfig.AssistantChatConfigSpeakSetup();
   }
 
   static AssistantChatConfigToggle(open) {
+    if (!open) {
+      AssistantChatConfig.AssistantChatConfigVoiceStop();
+    }
     const { toggle, panel, input } = state.el;
     toggle.setAttribute("aria-expanded", String(open));
     panel.hidden = !open;
@@ -125,6 +144,13 @@ class AssistantChatConfig {
       input.focus();
     } else {
       toggle.focus();
+    }
+  }
+  static AssistantChatConfigVoiceStop() {
+    state.voiceCancel?.();
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
     }
   }
 
@@ -325,6 +351,9 @@ class AssistantChatConfig {
     row.append(bubble, meta);
     state.el.log.appendChild(row);
     AssistantChatConfig.AssistantChatConfigScroll();
+    if (persist && role === "bot") {
+      AssistantChatConfig.AssistantChatConfigSpeakText(text);
+    }
 
     if (persist && role !== "error") {
       try {
@@ -460,6 +489,217 @@ class AssistantChatConfig {
       state.el.send.disabled = false;
       state.el.input.focus();
     }
+  }
+
+  static AssistantChatConfigVoice() {
+    const { mic, input } = state.el;
+
+    if (!mic) return;
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    // Browser does not support speech recognition
+    if (!SR || !window.isSecureContext) {
+      mic.hidden = true;
+      return;
+    }
+
+    const idlePlaceholder = input.placeholder;
+
+    let finalText = "";
+    let heard = "";
+    let cancelled = false;
+
+    const rec = new SR();
+
+    rec.lang = state.voiceLang;
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+
+    state.rec = rec;
+
+    const setIdle = () => {
+      state.listening = false;
+
+      mic.classList.remove("is-listening");
+
+      mic.setAttribute("aria-pressed", "false");
+
+      mic.setAttribute("aria-label", "Speak your question");
+
+      mic.title = "Speak your question";
+
+      input.placeholder = idlePlaceholder;
+    };
+
+    rec.onstart = () => {
+      state.listening = true;
+
+      finalText = "";
+      heard = "";
+      cancelled = false;
+
+      mic.classList.add("is-listening");
+
+      mic.setAttribute("aria-pressed", "true");
+
+      mic.setAttribute("aria-label", "Stop listening");
+
+      mic.title = "Stop listening";
+
+      input.value = "";
+
+      input.placeholder = "Listening...";
+    };
+
+    rec.onresult = (e) => {
+      let interim = "";
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript;
+
+        if (e.results[i].isFinal) {
+          finalText += text;
+        } else {
+          interim += text;
+        }
+      }
+
+      heard = finalText + interim;
+
+      input.value = heard.trim().slice(0, 500);
+    };
+
+    rec.onerror = (e) => {
+      cancelled = true;
+
+      const messages = {
+        "not-allowed":
+          "Microphone access is blocked. Allow it in your browser's site settings and try again.",
+
+        "service-not-allowed":
+          "Microphone access is blocked. Allow it in your browser's site settings and try again.",
+
+        "no-speech": "I didn't hear anything. Tap the mic and try again.",
+
+        "audio-capture": "No microphone was found on this device.",
+
+        network:
+          "Voice input could not reach the browser's speech service. Check your connection.",
+      };
+
+      if (e.error !== "aborted" && messages[e.error]) {
+        AssistantChatConfig.AssistantChatConfigAdd("error", messages[e.error]);
+      }
+    };
+
+    rec.onend = () => {
+      const text = (finalText || heard).trim();
+
+      setIdle();
+
+      if (cancelled || !text) {
+        input.value = "";
+
+        return;
+      }
+
+      // Send recognized speech
+      AssistantChatConfig.AssistantChatConfigSend(text.slice(0, 500));
+    };
+
+    mic.addEventListener("click", () => {
+      if (state.busy) return;
+
+      if (state.listening) {
+        rec.stop();
+
+        return;
+      }
+
+      try {
+        rec.start();
+      } catch (err) {
+        // Already started
+      }
+    });
+
+    state.voiceCancel = () => {
+      if (state.listening) {
+        cancelled = true;
+
+        rec.abort();
+      }
+    };
+  }
+  static AssistantChatConfigSpeakSetup() {
+    const btn = state.el.speakBtn;
+
+    if (!btn) return;
+
+    // Browser doesn't support text-to-speech
+    if (!("speechSynthesis" in window)) {
+      btn.hidden = true;
+
+      return;
+    }
+
+    try {
+      state.speak = localStorage.getItem("assistantChat:speak") === "1";
+    } catch (e) {
+      // Ignore
+    }
+
+    const paint = () => {
+      btn.setAttribute("aria-pressed", String(state.speak));
+
+      btn.title = state.speak
+        ? "Reading answers aloud (click to mute)"
+        : "Read answers aloud";
+
+      btn.querySelector("i").className = state.speak
+        ? "fas fa-volume-up"
+        : "fas fa-volume-mute";
+    };
+
+    paint();
+
+    btn.addEventListener("click", () => {
+      state.speak = !state.speak;
+
+      if (!state.speak) {
+        window.speechSynthesis.cancel();
+      }
+
+      try {
+        localStorage.setItem("assistantChat:speak", state.speak ? "1" : "0");
+      } catch (e) {
+        // Ignore
+      }
+
+      paint();
+    });
+  }
+  static AssistantChatConfigSpeakText(text) {
+    if (!state.speak || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    const clean = String(text)
+      .replace(/\*\*|`/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!clean) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(clean);
+
+    utterance.lang = state.voiceLang;
+
+    window.speechSynthesis.speak(utterance);
   }
 }
 
